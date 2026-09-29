@@ -7,7 +7,7 @@ def fetch_private_telegram_kp2c():
     api_hash = os.getenv("TELEGRAM_API_HASH")
 
     if not api_id or not api_hash:
-        return {"status": "failed", "message": "TELEGRAM_API_ID / API_HASH belum diisi di .env"}
+        return {"status": "failed", "message": "TELEGRAM_API_ID / API_HASH belum ada di .env"}
 
     client = TelegramClient('kp2c_session', int(api_id), api_hash)
 
@@ -15,9 +15,9 @@ def fetch_private_telegram_kp2c():
         await client.connect()
         if not await client.is_user_authorized():
             await client.disconnect()
-            return {"status": "failed", "message": "Belum terautentikasi/OTP belum diisi"}
+            return {"status": "failed", "message": "Belum login / OTP belum dimasukkan"}
 
-        # Cari dialog/chat yang mengandung kata 'KP2C' secara otomatis
+        # Otomatis cari chat/grup yang punya kata 'kp2c' di namanya
         target_dialog = None
         async for dialog in client.iter_dialogs():
             if "kp2c" in dialog.name.lower():
@@ -26,7 +26,7 @@ def fetch_private_telegram_kp2c():
 
         if not target_dialog:
             await client.disconnect()
-            return {"status": "failed", "message": "Grup/Channel KP2C tidak ditemukan di daftar obrolan Telegram"}
+            return {"status": "failed", "message": "Grup/Channel KP2C tidak ditemukan di daftar Telegram kamu"}
 
         result_data = None
         async for message in client.iter_messages(target_dialog.entity, limit=3):
@@ -48,18 +48,18 @@ def fetch_private_telegram_kp2c():
         return data
     except Exception as e:
         return {"status": "failed", "message": str(e)}
-    
-    def agent_2_social(state):
+
+def agent_2_social(state):
     print("\n[Agent 2] Menarik Laporan Live KP2C via Telegram Private Channel...")
 
     telegram_result = fetch_private_telegram_kp2c()
 
-    # Ekstrak teks laporan jika ada
+    # Ambil teks laporan jika berhasil
     report_text = None
     if telegram_result.get("status") == "success" and telegram_result.get("data"):
         report_text = telegram_result["data"].get("text")
 
-    # Update audit log
+    # Simpan ke log audit
     raw_audit_logs = state.get("raw_audit_logs", {})
     raw_audit_logs["agent_2_social"] = {
         "timestamp": telegram_result.get("data", {}).get("timestamp", "N/A") if isinstance(telegram_result.get("data"), dict) else "N/A",
@@ -67,7 +67,7 @@ def fetch_private_telegram_kp2c():
         "raw_data": telegram_result
     }
 
-    # HANYA KEMBALIKAN KUNCI YANG TERDAFTAR DI FloodState
+    # Hanya kembalikan key yang valid untuk FloodState
     return {
         "field_reports": report_text,
         "raw_audit_logs": raw_audit_logs
