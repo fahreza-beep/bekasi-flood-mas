@@ -9,41 +9,57 @@ def fetch_private_telegram_kp2c():
     if not api_id or not api_hash:
         return {"status": "failed", "message": "TELEGRAM_API_ID / API_HASH belum diisi di .env"}
 
-    # Nama session file yang disimpan lokal di Termux
     client = TelegramClient('kp2c_session', int(api_id), api_hash)
 
-    try:
-        async def main():
-            await client.start()
-            # Nama grup/channel privat KP2C di Telegram kamu
-            target_chat = "Info KP2C 1"
-
-            result_data = None
-            async for message in client.iter_messages(target_chat, limit=3):
-                if message.text:
-                    result_data = {
-                        "timestamp": str(message.date),
-                        "text": message.text
-                    }
-                    break
-
+    async def main():
+        await client.connect()
+        if not await client.is_user_authorized():
             await client.disconnect()
-            return result_data
+            return {"status": "failed", "message": "Belum terautentikasi/OTP belum diisi"}
 
+        # Cari dialog/chat yang mengandung kata 'KP2C' secara otomatis
+        target_dialog = None
+        async for dialog in client.iter_dialogs():
+            if "kp2c" in dialog.name.lower():
+                target_dialog = dialog
+                break
+
+        if not target_dialog:
+            await client.disconnect()
+            return {"status": "failed", "message": "Grup/Channel KP2C tidak ditemukan di daftar obrolan Telegram"}
+
+        result_data = None
+        async for message in client.iter_messages(target_dialog.entity, limit=3):
+            if message.text:
+                result_data = {
+                    "timestamp": str(message.date),
+                    "text": message.text
+                }
+                break
+
+        await client.disconnect()
+        return {"status": "success", "data": result_data}
+
+    try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         data = loop.run_until_complete(main())
-        return {"status": "success", "data": data}
+        loop.close()
+        return data
     except Exception as e:
         return {"status": "failed", "message": str(e)}
-
-def agent_2_social(state):
+    
+    def agent_2_social(state):
     print("\n[Agent 2] Menarik Laporan Live KP2C via Telegram Private Channel...")
 
-    # Memanggil fungsi scraper Telethon
     telegram_result = fetch_private_telegram_kp2c()
 
-    # Update audit logs di dalam state
+    # Ekstrak teks laporan jika ada
+    report_text = None
+    if telegram_result.get("status") == "success" and telegram_result.get("data"):
+        report_text = telegram_result["data"].get("text")
+
+    # Update audit log
     raw_audit_logs = state.get("raw_audit_logs", {})
     raw_audit_logs["agent_2_social"] = {
         "timestamp": telegram_result.get("data", {}).get("timestamp", "N/A") if isinstance(telegram_result.get("data"), dict) else "N/A",
@@ -51,6 +67,8 @@ def agent_2_social(state):
         "raw_data": telegram_result
     }
 
-    state["raw_audit_logs"] = raw_audit_logs
-    state["social_data"] = telegram_result
-    return state
+    # HANYA KEMBALIKAN KUNCI YANG TERDAFTAR DI FloodState
+    return {
+        "field_reports": report_text,
+        "raw_audit_logs": raw_audit_logs
+    }
