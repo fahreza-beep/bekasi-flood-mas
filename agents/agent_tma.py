@@ -5,7 +5,7 @@ from state import FloodState
 # Ambang Batas Normal Resmi BPBD Kota Bekasi & DBMSDA
 BATAS_NORMAL_BPBD = {
     "cileungsi": 100,
-    "cikeas": 200,  # Disesuaikan dengan acuan standar KP2C/BPBD (200cm)
+    "cikeas": 200,
     "p2c": 350
 }
 
@@ -20,14 +20,13 @@ def parse_tma_from_text_or_ocr(text: str) -> dict:
     Ekstrak angka TMA (cm) murni untuk 3 titik utama KP2C:
     Hulu Cileungsi, Hulu Cikeas, dan P2C.
     """
-    # Fallback default jika teks kosong/gagal di-parse
     latest_tma = {"cileungsi": 0, "cikeas": 0, "p2c": 0}
     if not text:
         return latest_tma
 
     text_lower = text.lower()
 
-    # Pattern presisi fokus mengambil angka SETELAH kata 'tma'
+    # Pattern presisi mengambil angka setelah kata 'tma'
     patterns = {
         "cileungsi": r'cileungsi[^\n]*?tma\s*(\d+)',
         "cikeas": r'cikeas[^\n]*?tma\s*(\d+)',
@@ -45,14 +44,14 @@ def parse_tma_from_text_or_ocr(text: str) -> dict:
 def agent_3_tma(state: FloodState) -> FloodState:
     print("\n[Agent 3] Membedah TMA Real-time Jam Terakhir & Logika Hidrologi BPBD...")
     
-    # Tangani field_reports baik berupa string maupun list
+    # Handling field_reports tipe string maupun list
     field_reports_data = state.get("field_reports", "")
     if isinstance(field_reports_data, list):
         combined_report_text = "\n".join(field_reports_data)
     else:
         combined_report_text = str(field_reports_data) if field_reports_data else ""
     
-    # Ambil angka TMA aktual 3 pos pantau murni dari Agent 2
+    # Ekstrak angka TMA aktual dari laporan KP2C
     tma = parse_tma_from_text_or_ocr(combined_report_text)
     
     is_cileungsi_kritis = tma["cileungsi"] > BATAS_NORMAL_BPBD["cileungsi"]
@@ -72,16 +71,18 @@ def agent_3_tma(state: FloodState) -> FloodState:
         tma_status = f"NORMAL BPBD (TMA Terbaca: Cileungsi {tma['cileungsi']}cm, Cikeas {tma['cikeas']}cm, P2C {tma['p2c']}cm)"
         travel_time = 0.0
 
-    # Ambil audit log lama agar tidak tertimpa (preserve previous logs)
+    # Pertahankan audit log dari agen-agen sebelumnya
     raw_audit_logs = state.get("raw_audit_logs", {})
     
-    # Simpan log khusus Agent 3 dengan sumber data yang jelas
+    # Isi log audit Agent 3 lengkap dengan key "raw_data"
     raw_audit_logs["agent_3_hydrology"] = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source": "Hasil Ekstraksi Parsing Laporan Live KP2C (Agent 2)",
-        "parsed_numbers": tma,
-        "official_bpbd_baselines": BATAS_NORMAL_BPBD,
-        "official_travel_time_reference": TRAVEL_TIME_RULES
+        "raw_data": {
+            "parsed_tma_cm": tma,
+            "official_bpbd_baselines": BATAS_NORMAL_BPBD,
+            "official_travel_time_reference": TRAVEL_TIME_RULES
+        }
     }
 
     return {
