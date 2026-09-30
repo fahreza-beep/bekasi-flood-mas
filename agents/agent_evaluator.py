@@ -5,18 +5,19 @@ from state import FloodState
 
 load_dotenv()
 
-# Import fleksibel (PC Fedora & Termux)
+# Dual Import compatibility (PC Fedora & Termux)
 try:
     from langchain_openai import ChatOpenAI
 except ImportError:
     from langchain_community.chat_models import ChatOpenAI
 
-# Ambil key dari VIKEY_API_KEY atau OPENAI_API_KEY
+# Ambil API key dan base URL dari .env
 api_key = os.getenv("VIKEY_API_KEY") or os.getenv("OPENAI_API_KEY")
 api_base = os.getenv("OPENAI_API_BASE") or "https://api.vikey.ai/v1"
 
+# Menggunakan model gemini-3.8-flash resmi dari Vikey API
 llm = ChatOpenAI(
-    model_name="gpt-4o-mini",
+    model_name="gemini-3.8-flash",  # Atau bisa diganti "gpt-5.6-luna"
     openai_api_base=api_base,
     openai_api_key=api_key,
     request_timeout=15,
@@ -24,7 +25,7 @@ llm = ChatOpenAI(
 )
 
 def agent_4_evaluator(state: FloodState) -> FloodState:
-    print("\n[Agent 4] Memproses Keputusan Akhir & Peringatan Dini...")
+    print("\n[Agent 4] Memproses Keputusan Akhir & Peringatan Dini via Vikey API...")
     
     hulu_forecast = state.get("hulu_forecast", "")
     tma_status = state.get("tma_status", "")
@@ -38,7 +39,7 @@ def agent_4_evaluator(state: FloodState) -> FloodState:
     else:
         risk_level = "AMAN"
 
-    # 2. Prompt Engineering Khusus (Updated: Telegram KP2C & BMKG)
+    # 2. Prompt Engineering Khusus (Sumber: Telegram KP2C & BMKG)
     system_prompt = (
         "Kamu adalah Asisten Ahli Kebencanaan BPBD & Komunitas Peduli Cileungsi Cikeas (KP2C). "
         "Tugasmu adalah menyusun Laporan Peringatan Dini Banjir yang informatif, tenang, dan akurat untuk warga.\n\n"
@@ -60,7 +61,7 @@ def agent_4_evaluator(state: FloodState) -> FloodState:
         f"- Data Peringatan Cuaca BMKG: {hulu_forecast}\n"
     )
 
-    # 3. Generate Narasi via LLM dengan Proteksi Try-Except
+    # 3. Generate Narasi via LLM dengan Proteksi Fallback
     try:
         messages = [
             {"role": "system", "content": system_prompt},
@@ -69,8 +70,7 @@ def agent_4_evaluator(state: FloodState) -> FloodState:
         response = llm.invoke(messages)
         warning_statement = response.content
     except Exception as e:
-        print(f"⚠️ Vikey API Error/Overloaded ({str(e)}). Menggunakan Narasi Fallback Template.")
-        # Template Cadangan Terupdate
+        print(f"⚠️ Vikey API Error ({str(e)}). Menggunakan Narasi Fallback Template.")
         warning_statement = (
             f"--- LAPORAN PERINGATAN DINI BANJIR BEKASI ---\n"
             f"STATUS RISIKO: {risk_level}\n\n"
