@@ -1,7 +1,9 @@
-langchain-openai
-langchain-core
 langgraph
-python-dotenv
+langchain
+langchain-community
+langchain-core
+telethon
+python-telegram-bot
 requests
-beautifulsoup4
-lxml
+xmltodict
+python-dotenv
