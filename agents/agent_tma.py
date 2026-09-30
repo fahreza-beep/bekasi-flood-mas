@@ -50,24 +50,28 @@ def parse_tma_from_text_or_ocr(text: str) -> dict:
 
     return latest_tma
 
-
 def agent_3_tma(state: FloodState) -> FloodState:
     print("\n[Agent 3] Membedah TMA Real-time Jam Terakhir & Logika Hidrologi BPBD...")
     
-    # Ambil teks laporan KP2C langsung dari Agent 2 (raw_social_data)
     combined_report_text = ""
     raw_social = state.get("raw_social_data", {})
     field_reports_data = state.get("field_reports", "")
 
+    # PRIORITAS 1: Ambil langsung dari Agent 2 (raw_social_data)
     if isinstance(raw_social, dict) and "data" in raw_social:
         combined_report_text = raw_social["data"].get("text", "")
-    elif isinstance(raw_social, str) and raw_social:
+    elif isinstance(raw_social, str) and raw_social.strip():
         combined_report_text = raw_social
-    elif field_reports_data:
+    
+    # PRIORITAS 2: Jika raw_social_data kosong, baru fallback ke field_reports
+    if not combined_report_text and field_reports_data:
         if isinstance(field_reports_data, list):
-            combined_report_text = "\n".join(field_reports_data)
+            combined_report_text = "\n".join([str(x) for x in field_reports_data if x])
         else:
             combined_report_text = str(field_reports_data)
+
+    # Print log di terminal untuk debugging memastikan teks KP2C masuk
+    print(f"[DEBUG Agent 3] Panjang Teks KP2C Diterima: {len(combined_report_text)} karakter")
     
     # Ekstrak angka TMA aktual jam terakhir
     tma = parse_tma_from_text_or_ocr(combined_report_text)
@@ -76,17 +80,19 @@ def agent_3_tma(state: FloodState) -> FloodState:
     is_cikeas_kritis = tma["cikeas"] > BATAS_NORMAL_BPBD["cikeas"]
     is_p2c_kritis = tma["p2c"] > BATAS_NORMAL_BPBD["p2c"]
 
+    tma_detail_str = f"Cileungsi: {tma['cileungsi']} cm, Cikeas: {tma['cikeas']} cm, P2C: {tma['p2c']} cm"
+
     if is_cileungsi_kritis:
-        tma_status = f"SIAGA/WASPADA HULU CILEUNGSI (TMA Terbaca: Cileungsi {tma['cileungsi']}cm, Cikeas {tma['cikeas']}cm, P2C {tma['p2c']}cm)"
+        tma_status = f"SIAGA/WASPADA HULU CILEUNGSI ({tma_detail_str})"
         travel_time = 4.0
     elif is_cikeas_kritis:
-        tma_status = f"SIAGA/WASPADA HULU CIKEAS (TMA Terbaca: Cileungsi {tma['cileungsi']}cm, Cikeas {tma['cikeas']}cm, P2C {tma['p2c']}cm)"
+        tma_status = f"SIAGA/WASPADA HULU CIKEAS ({tma_detail_str})"
         travel_time = 3.0
     elif is_p2c_kritis:
-        tma_status = f"SIAGA/WASPADA P2C (TMA Terbaca: Cileungsi {tma['cileungsi']}cm, Cikeas {tma['cikeas']}cm, P2C {tma['p2c']}cm)"
+        tma_status = f"SIAGA/WASPADA P2C ({tma_detail_str})"
         travel_time = 1.0
     else:
-        tma_status = f"NORMAL BPBD (TMA Terbaca: Cileungsi {tma['cileungsi']}cm, Cikeas {tma['cikeas']}cm, P2C {tma['p2c']}cm)"
+        tma_status = f"NORMAL BPBD ({tma_detail_str})"
         travel_time = 0.0
 
     # Audit Log
@@ -103,6 +109,7 @@ def agent_3_tma(state: FloodState) -> FloodState:
 
     return {
         "tma_status": tma_status,
+        "parsed_tma": tma,
         "travel_time_hours": travel_time,
         "raw_audit_logs": raw_audit_logs
     }

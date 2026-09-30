@@ -86,5 +86,7 @@ def agent_4_evaluator(state: FloodState) -> FloodState:
 
     return {
         "flood_risk_level": risk_level,
-        "warning_statement": warning_statement
+        "warning_statement": warning_statement,
+        "parsed_tma": parsed_tma  # <--- Tambahkan baris ini agar state tetap membawa data angka presisi
     }
+
