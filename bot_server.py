@@ -33,7 +33,7 @@ def format_audit_logs(raw_audit_logs: dict) -> str:
     text += f"• *Data Mentah/Raw* : `{json.dumps(social_log.get('raw_data', {}), ensure_ascii=False)}`\n"
 
     # Audit Agent 3 - Hydrology / TMA
-    tma_log = raw_audit_logs.get("agent_3_hydrology", {})
+    tma_log = raw_audit_logs.get("agent_3_tma", {})
     text += "\n📌 *[AGENT_3_HYDROLOGY]*\n"
     text += f"• *Waktu Ambil Data* : `{tma_log.get('timestamp', 'N/A')}`\n"
     text += f"• *Sumber Data* : {tma_log.get('source', 'N/A')}\n"
