@@ -90,3 +90,10 @@ TELEGRAM_API_HASH=your_telethon_api_hash
 ## 📊 Fitur Unggulan: Audit Log Transparan
 
 Sistem menyajikan **Raw Data Audit** transparan dari setiap agen sebelum laporan akhir ditampilkan, sehingga *stakeholder* dan masyarakat dapat memverifikasi keabsahan data mentah dari BMKG dan KP2C secara akuntabel.
+
+## 📜 Atribusi Sumber Data & Hak Cipta
+
+Sistem ini memanfaatkan data publik dari instansi resmi dan komunitas:
+
+* **BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)**: Seluruh data peringatan dini cuaca ekstrem bersumber dari API/Layanan Informasi Publik BMKG. Penggunaan data BMKG pada sistem ini ditampilkan secara utuh untuk kepentingan peringatan dini masyarakat.
+* **KP2C (Komunitas Peduli Cileungsi Cikeas)**: Data Tinggi Muka Air (TMA) real-time bersumber dari laporan pemantauan live kanal resmi Telegram KP2C.
