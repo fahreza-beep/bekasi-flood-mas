@@ -1,6 +1,6 @@
 import os
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
-from langchain_community.chat_models import ChatOpenAI
 from state import FloodState
 
 load_dotenv()
