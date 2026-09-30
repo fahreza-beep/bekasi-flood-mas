@@ -1,72 +1,90 @@
 import os
-from langchain_openai import ChatOpenAI
+from datetime import datetime
 from dotenv import load_dotenv
 from state import FloodState
 
 load_dotenv()
 
-# Menggunakan Vikey API (OpenAI Compatible Endpoint)
+# Import fleksibel (PC Fedora & Termux)
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    from langchain_community.chat_models import ChatOpenAI
+
+# Ambil key dari VIKEY_API_KEY atau OPENAI_API_KEY
+api_key = os.getenv("VIKEY_API_KEY") or os.getenv("OPENAI_API_KEY")
+api_base = os.getenv("OPENAI_API_BASE") or "https://api.vikey.ai/v1"
+
 llm = ChatOpenAI(
-    model="gemini/gemini-3.8-flash",
-    openai_api_key=os.getenv("VIKEY_API_KEY"),
-    openai_api_base="https://api.vikey.ai/v1",
-    temperature=0.1
+    model_name="gpt-4o-mini",
+    openai_api_base=api_base,
+    openai_api_key=api_key,
+    request_timeout=15,
+    max_retries=1
 )
 
 def agent_4_evaluator(state: FloodState) -> FloodState:
-    print("\n[Agent 4] Memproses Keputusan Akhir & Peringatan Dini via Vikey API...")
+    print("\n[Agent 4] Memproses Keputusan Akhir & Peringatan Dini...")
     
-    hulu_forecast = state.get("hulu_forecast", "Tidak ada data BMKG")
-    field_reports = state.get("field_reports", ["Tidak ada data sosial media"])
-    tma_status = state.get("tma_status", "Status TMA belum dihitung")
-    travel_time = state.get("travel_time_hours", 0.0)
-    
-    prompt = f"""
-    Kamu adalah sistem Peringatan Dini Banjir (Early Warning System) resmi untuk DAS Cileungsi - Cikeas - Kali Bekasi.
-    
-    RINGKASAN DATA FAKTUAL (REAL-TIME):
-    1. BMKG Weather Alert:
-       {hulu_forecast}
-       
-    2. Laporan KP2C & Hasil OCR Gambar X:
-       {field_reports}
-       
-    3. Status Evaluasi TMA (Agent 3) & Travel Time:
-       {tma_status} | Estimasi Tiba di Bekasi: {travel_time} Jam
-    
-    INSTRUKSI UTAMA (ANTI-HALLUCINATION):
-    - Sebutkan angka TMA aktual (dalam cm) yang terbaca di laporan untuk Cileungsi, Cikeas, dan P2C.
-    - Jangan menambah atau mengarang angka yang tidak ada pada Ringkasan Data di atas.
-    - Tentukan Tingkat Risiko Keseluruhan (AMAN / WASPADA / SIAGA / AWAS).
-    
-    Format Jawaban Resmi:
-    --- LAPORAN PERINGATAN DINI BANJIR BEKASI ---
-    STATUS RISIKO: [AMAN / WASPADA / SIAGA / AWAS]
-    DATA TMA TERBACA: [Sebutkan Rincian cm Hulu Cileungsi, Hulu Cikeas, dan P2C]
-    ESTIMASI WAKTU KEDATANGAN AIR: [X Jam / Tidak Ada Potensi Limpasan]
-    
-    NARASI UNTUK WARGA:
-    [Tulis narasi ringkas berisi situasi terkini dan imbauan/langkah yang perlu diambil warga permukiman rawan (Bojongkulur, Jatiasih, Kemang Pratama, PGP)]
-    """
-    
-    try:
-        response = llm.invoke(prompt)
-        content = response.content
-        
+    hulu_forecast = state.get("hulu_forecast", "")
+    tma_status = state.get("tma_status", "")
+    travel_time = state.get("travel_time_hours", 0)
+
+    # 1. Logika Deterministik Status Risiko
+    if "SIAGA" in tma_status or "WASPADA" in tma_status:
+        risk_level = "WASPADA"
+    elif "BMKG Alert" in hulu_forecast or "Hujan Lebat" in hulu_forecast:
+        risk_level = "WASPADA (Peringatan Cuaca Ekstrem Hulu)"
+    else:
         risk_level = "AMAN"
-        if "AWAS" in content:
-            risk_level = "AWAS"
-        elif "SIAGA" in content:
-            risk_level = "SIAGA"
-        elif "WASPADA" in content:
-            risk_level = "WASPADA"
-            
-        return {
-            "flood_risk_level": risk_level,
-            "warning_statement": content
-        }
+
+    # 2. Prompt Engineering Khusus (Updated: Telegram KP2C & BMKG)
+    system_prompt = (
+        "Kamu adalah Asisten Ahli Kebencanaan BPBD & Komunitas Peduli Cileungsi Cikeas (KP2C). "
+        "Tugasmu adalah menyusun Laporan Peringatan Dini Banjir yang informatif, tenang, dan akurat untuk warga.\n\n"
+        "SUMBER DATA DITERIMA:\n"
+        "1. Laporan Pemantauan TMA Real-time dari Kanal Resmi Telegram KP2C.\n"
+        "2. Peringatan Dini Cuaca Ekstrem dari BMKG.\n\n"
+        "ATURAN PENULISAN:\n"
+        "- Tegaskan bahwa data Tinggi Muka Air (TMA) diperoleh langsung dari pemantauan live Telegram KP2C.\n"
+        "- Sebutkan status risiko, angka TMA di Hulu Cileungsi, Hulu Cikeas, dan P2C.\n"
+        "- Sertakan estimasi waktu tempuh air jika ada potensi peningkatan TMA.\n"
+        "- Berikan himbauan yang menenangkan namun tetap waspada untuk warga bantaran sungai (Bojongkulur, Villa Nusa Indah, Jatiasih, PGP, Kemang Pratama)."
+    )
+
+    user_prompt = (
+        f"Susun laporan peringatan dini berdasarkan data berikut:\n"
+        f"- Status Risiko Sistem: {risk_level}\n"
+        f"- Status TMA & Sungai: {tma_status}\n"
+        f"- Estimasi Waktu Tempuh Air: {travel_time} Jam\n"
+        f"- Data Peringatan Cuaca BMKG: {hulu_forecast}\n"
+    )
+
+    # 3. Generate Narasi via LLM dengan Proteksi Try-Except
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        response = llm.invoke(messages)
+        warning_statement = response.content
     except Exception as e:
-        return {
-            "flood_risk_level": "ERROR",
-            "warning_statement": f"Gagal menghasilkan laporan via Vikey API: {str(e)}"
-        }
+        print(f"⚠️ Vikey API Error/Overloaded ({str(e)}). Menggunakan Narasi Fallback Template.")
+        # Template Cadangan Terupdate
+        warning_statement = (
+            f"--- LAPORAN PERINGATAN DINI BANJIR BEKASI ---\n"
+            f"STATUS RISIKO: {risk_level}\n\n"
+            f"DATA TANGKAP AIR & KALI (Sumber: Telegram KP2C):\n"
+            f"- {tma_status}\n"
+            f"- Estimasi Waktu Tempuh Air: {travel_time} Jam\n\n"
+            f"INFO CUACA HULU (Sumber: BMKG):\n"
+            f"{hulu_forecast}\n\n"
+            f"HIMBAUAN WARGA:\n"
+            f"Warga di sepanjang bantaran sungai (Bojongkulur, Villa Nusa Indah, Jatiasih, PGP, Kemang Pratama) "
+            f"diimbau untuk tetap tenang namun waspada serta terus memantau pembaruan data berkala dari KP2C dan BPBD."
+        )
+
+    return {
+        "flood_risk_level": risk_level,
+        "warning_statement": warning_statement
+    }
