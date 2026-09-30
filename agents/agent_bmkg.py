@@ -52,15 +52,19 @@ def agent_1_bmkg(state: FloodState) -> FloodState:
     print("\n[Agent 1] Menarik Peringatan Dini BMKG khusus Wilayah Cileungsi-Cikeas-Bekasi...")
     forecast_data = fetch_bmkg_alerts_kp2c_area()
 
-    audit_entry = {
-        "agent_1_bmkg": {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "source": BMKG_NOWCAST_URL,
-            "raw_payload_summary": forecast_data
+    # Mencegah NoneType jika state["raw_audit_logs"] awalnya None
+    raw_audit_logs = state.get("raw_audit_logs") or {}
+
+    raw_audit_logs["agent_1_bmkg"] = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": BMKG_NOWCAST_URL,
+        "raw_data": {
+            "forecast_summary": forecast_data
         }
     }
 
     return {
         "hulu_forecast": forecast_data,
-        "raw_audit_logs": audit_entry
+        "raw_audit_logs": raw_audit_logs
     }
+
