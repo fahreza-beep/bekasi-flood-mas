@@ -24,52 +24,52 @@ def parse_tma_from_text_or_ocr(text: str) -> dict:
     if not text:
         return latest_tma
 
-    # Helper untuk mengambil angka TMA di jam paling bawah (terakhir) pada suatu seksi
     def get_last_tma_number(section_str: str) -> int:
-        # Mencari semua pola 'tma <angka>' di blok terkait
+        # Mencari semua pola angka setelah 'tma' (contoh: 'tma 25', 'tma 60')
         matches = re.findall(r'tma\s*(\d+)', section_str, re.IGNORECASE)
         if matches:
-            return int(matches[-1])  # Ambil nilai paling bawah/baru
+            return int(matches[-1]) # Ambil angka di baris jam paling bawah/terbaru
         return 0
 
     text_lower = text.lower()
 
-    # 1. Isolasi Blok Hulu Cileungsi
-    cileungsi_match = re.search(r'hulu cileungsi(.*?)(?=hulu cikeas|pertemuan cileungsi|\Z)', text_lower, re.DOTALL)
+    # 1. Seksi Hulu Cileungsi
+    cileungsi_match = re.search(r'hulu cileungsi\s*\n(.*?)(?=hulu cikeas|\Z)', text_lower, re.DOTALL)
     if cileungsi_match:
         latest_tma["cileungsi"] = get_last_tma_number(cileungsi_match.group(1))
 
-    # 2. Isolasi Blok Hulu Cikeas
-    cikeas_match = re.search(r'hulu cikeas(.*?)(?=pertemuan cileungsi|p2c|\Z)', text_lower, re.DOTALL)
+    # 2. Seksi Hulu Cikeas
+    cikeas_match = re.search(r'hulu cikeas\s*\n(.*?)(?=pertemuan|p2c\b|\Z)', text_lower, re.DOTALL)
     if cikeas_match:
         latest_tma["cikeas"] = get_last_tma_number(cikeas_match.group(1))
 
-    # 3. Isolasi Blok P2C (Pertemuan Cileungsi - Cikeas)
-    p2c_match = re.search(r'(?:pertemuan cileungsi\s*-\s*cikeas|p2c)(.*?)(?=\(jika|ket:|\n\n\n|\Z)', text_lower, re.DOTALL)
+    # 3. Seksi P2C (Pertemuan Cileungsi - Cikeas)
+    p2c_match = re.search(r'(?:pertemuan cileungsi\s*-\s*cikeas|p2c)\s*\n(.*?)(?=\(jika|ket:|\n\n\n|\Z)', text_lower, re.DOTALL)
     if p2c_match:
         latest_tma["p2c"] = get_last_tma_number(p2c_match.group(1))
 
     return latest_tma
 
+
 def agent_3_tma(state: FloodState) -> FloodState:
     print("\n[Agent 3] Membedah TMA Real-time Jam Terakhir & Logika Hidrologi BPBD...")
     
-    # Ambil laporan dari field_reports atau raw_social_data
+    # Ambil teks laporan KP2C langsung dari Agent 2 (raw_social_data)
     combined_report_text = ""
-    field_reports_data = state.get("field_reports", "")
     raw_social = state.get("raw_social_data", {})
+    field_reports_data = state.get("field_reports", "")
 
-    if field_reports_data:
+    if isinstance(raw_social, dict) and "data" in raw_social:
+        combined_report_text = raw_social["data"].get("text", "")
+    elif isinstance(raw_social, str) and raw_social:
+        combined_report_text = raw_social
+    elif field_reports_data:
         if isinstance(field_reports_data, list):
             combined_report_text = "\n".join(field_reports_data)
         else:
             combined_report_text = str(field_reports_data)
-    elif isinstance(raw_social, dict) and "data" in raw_social:
-        combined_report_text = raw_social["data"].get("text", "")
-    elif isinstance(raw_social, str):
-        combined_report_text = raw_social
     
-    # Ekstrak angka TMA aktual jam terakhir dari laporan KP2C
+    # Ekstrak angka TMA aktual jam terakhir
     tma = parse_tma_from_text_or_ocr(combined_report_text)
     
     is_cileungsi_kritis = tma["cileungsi"] > BATAS_NORMAL_BPBD["cileungsi"]
