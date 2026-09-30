@@ -17,7 +17,7 @@ api_base = os.getenv("OPENAI_API_BASE") or "https://api.vikey.ai/v1"
 
 # Menggunakan model gemini-3.8-flash resmi dari Vikey API
 llm = ChatOpenAI(
-    model_name="gemini-3.8-flash",  # Atau bisa diganti "gpt-5.6-luna"
+    model_name="gemini/gemini-3.8-flash",  # Atau bisa diganti "gpt-5.6-luna"
     openai_api_base=api_base,
     openai_api_key=api_key,
     request_timeout=15,
