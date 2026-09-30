@@ -24,27 +24,32 @@ def parse_tma_from_text_or_ocr(text: str) -> dict:
     if not text:
         return latest_tma
 
-    # Helper untuk mengambil angka tma paling bawah (terakhir) dari suatu blok seksi
-    def extract_last_tma_in_block(block_text: str) -> int:
-        matches = re.findall(r'tma\s*(\d+)', block_text, re.IGNORECASE)
+    # Helper untuk mengambil angka TMA di jam paling bawah (terakhir) pada suatu seksi
+    def get_last_tma_number(section_str: str) -> int:
+        # Mencari semua pola 'tma <angka>' di blok terkait
+        matches = re.findall(r'tma\s*(\d+)', section_str, re.IGNORECASE)
         if matches:
-            return int(matches[-1]) # Ambil yang paling baru (paling akhir)
+            return int(matches[-1])  # Ambil nilai paling bawah/baru
         return 0
 
-    # Potong teks menjadi blok tiap lokasi menggunakan Regex multiline (re.DOTALL)
-    cileungsi_block = re.search(r'(?:hulu cileungsi)(.*?)(?=(?:hulu cikeas|pertemuan|p2c|\Z))', text, re.IGNORECASE | re.DOTALL)
-    cikeas_block = re.search(r'(?:hulu cikeas)(.*?)(?=(?:pertemuan|p2c|\Z))', text, re.IGNORECASE | re.DOTALL)
-    p2c_block = re.search(r'(?:pertemuan cileungsi\s*-\s*cikeas|p2c)(.*?)(?=(?:\(jika|\n\n\n|\Z))', text, re.IGNORECASE | re.DOTALL)
+    text_lower = text.lower()
 
-    if cileungsi_block:
-        latest_tma["cileungsi"] = extract_last_tma_in_block(cileungsi_block.group(1))
-    if cikeas_block:
-        latest_tma["cikeas"] = extract_last_tma_in_block(cikeas_block.group(1))
-    if p2c_block:
-        latest_tma["p2c"] = extract_last_tma_in_block(p2c_block.group(1))
+    # 1. Isolasi Blok Hulu Cileungsi
+    cileungsi_match = re.search(r'hulu cileungsi(.*?)(?=hulu cikeas|pertemuan cileungsi|\Z)', text_lower, re.DOTALL)
+    if cileungsi_match:
+        latest_tma["cileungsi"] = get_last_tma_number(cileungsi_match.group(1))
+
+    # 2. Isolasi Blok Hulu Cikeas
+    cikeas_match = re.search(r'hulu cikeas(.*?)(?=pertemuan cileungsi|p2c|\Z)', text_lower, re.DOTALL)
+    if cikeas_match:
+        latest_tma["cikeas"] = get_last_tma_number(cikeas_match.group(1))
+
+    # 3. Isolasi Blok P2C (Pertemuan Cileungsi - Cikeas)
+    p2c_match = re.search(r'(?:pertemuan cileungsi\s*-\s*cikeas|p2c)(.*?)(?=\(jika|ket:|\n\n\n|\Z)', text_lower, re.DOTALL)
+    if p2c_match:
+        latest_tma["p2c"] = get_last_tma_number(p2c_match.group(1))
 
     return latest_tma
-
 
 def agent_3_tma(state: FloodState) -> FloodState:
     print("\n[Agent 3] Membedah TMA Real-time Jam Terakhir & Logika Hidrologi BPBD...")
