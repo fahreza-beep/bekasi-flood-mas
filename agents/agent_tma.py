@@ -2,7 +2,6 @@ import re
 from datetime import datetime
 from state import FloodState
 
-# Ambang Batas Normal Resmi BPBD Kota Bekasi & DBMSDA
 BATAS_NORMAL_BPBD = {
     "cileungsi": 100,
     "cikeas": 200,
@@ -16,64 +15,46 @@ TRAVEL_TIME_RULES = {
 }
 
 def parse_tma_from_text_or_ocr(text: str) -> dict:
-    """
-    Ekstrak angka TMA (cm) jam TERAKHIR untuk 3 titik utama KP2C:
-    Hulu Cileungsi, Hulu Cikeas, dan P2C.
-    """
     latest_tma = {"cileungsi": 0, "cikeas": 0, "p2c": 0}
     if not text:
         return latest_tma
 
-    def get_last_tma_number(section_str: str) -> int:
-        # Mencari semua pola angka setelah 'tma' (contoh: 'tma 25', 'tma 60')
-        matches = re.findall(r'tma\s*(\d+)', section_str, re.IGNORECASE)
-        if matches:
-            return int(matches[-1]) # Ambil angka di baris jam paling bawah/terbaru
-        return 0
+    clean_text = text.replace('\xa0', ' ')
 
-    text_lower = text.lower()
+    def extract_tma(section_match):
+        if not section_match:
+            return 0
+        sec_str = section_match.group(1)
+        matches = re.findall(r'tma\s*(\d+)', sec_str, re.IGNORECASE)
+        return int(matches[-1]) if matches else 0
 
-    # 1. Seksi Hulu Cileungsi
-    cileungsi_match = re.search(r'hulu cileungsi\s*\n(.*?)(?=hulu cikeas|\Z)', text_lower, re.DOTALL)
-    if cileungsi_match:
-        latest_tma["cileungsi"] = get_last_tma_number(cileungsi_match.group(1))
+    cileungsi_sec = re.search(r'\*?Hulu Cileungsi\*?[\s\S]*?\*?BATAS NORMAL.*?\n([\s\S]*?)(?=\*?Hulu Cikeas\*?|\Z)', clean_text, re.IGNORECASE)
+    cikeas_sec = re.search(r'\*?Hulu Cikeas\*?[\s\S]*?\*?BATAS NORMAL.*?\n([\s\S]*?)(?=\*?Pertemuan|\*?P2C\*?|\Z)', clean_text, re.IGNORECASE)
+    p2c_sec = re.search(r'\*?(?:Pertemuan Cileungsi\s*-\s*Cikeas|P2C)\*?[\s\S]*?\*?BATAS NORMAL.*?\n([\s\S]*?)(?=\(Jika|Ket:|\Z)', clean_text, re.IGNORECASE)
 
-    # 2. Seksi Hulu Cikeas
-    cikeas_match = re.search(r'hulu cikeas\s*\n(.*?)(?=pertemuan|p2c\b|\Z)', text_lower, re.DOTALL)
-    if cikeas_match:
-        latest_tma["cikeas"] = get_last_tma_number(cikeas_match.group(1))
-
-    # 3. Seksi P2C (Pertemuan Cileungsi - Cikeas)
-    p2c_match = re.search(r'(?:pertemuan cileungsi\s*-\s*cikeas|p2c)\s*\n(.*?)(?=\(jika|ket:|\n\n\n|\Z)', text_lower, re.DOTALL)
-    if p2c_match:
-        latest_tma["p2c"] = get_last_tma_number(p2c_match.group(1))
+    latest_tma["cileungsi"] = extract_tma(cileungsi_sec)
+    latest_tma["cikeas"] = extract_tma(cikeas_sec)
+    latest_tma["p2c"] = extract_tma(p2c_sec)
 
     return latest_tma
 
 def agent_3_tma(state: FloodState) -> FloodState:
     print("\n[Agent 3] Membedah TMA Real-time Jam Terakhir & Logika Hidrologi BPBD...")
     
-    combined_report_text = ""
     raw_social = state.get("raw_social_data", {})
     field_reports_data = state.get("field_reports", "")
+    combined_report_text = ""
 
-    # PRIORITAS 1: Ambil langsung dari Agent 2 (raw_social_data)
     if isinstance(raw_social, dict) and "data" in raw_social:
         combined_report_text = raw_social["data"].get("text", "")
     elif isinstance(raw_social, str) and raw_social.strip():
         combined_report_text = raw_social
-    
-    # PRIORITAS 2: Jika raw_social_data kosong, baru fallback ke field_reports
-    if not combined_report_text and field_reports_data:
+    elif field_reports_data:
         if isinstance(field_reports_data, list):
             combined_report_text = "\n".join([str(x) for x in field_reports_data if x])
         else:
             combined_report_text = str(field_reports_data)
 
-    # Print log di terminal untuk debugging memastikan teks KP2C masuk
-    print(f"[DEBUG Agent 3] Panjang Teks KP2C Diterima: {len(combined_report_text)} karakter")
-    
-    # Ekstrak angka TMA aktual jam terakhir
     tma = parse_tma_from_text_or_ocr(combined_report_text)
     
     is_cileungsi_kritis = tma["cileungsi"] > BATAS_NORMAL_BPBD["cileungsi"]
@@ -95,8 +76,7 @@ def agent_3_tma(state: FloodState) -> FloodState:
         tma_status = f"NORMAL BPBD ({tma_detail_str})"
         travel_time = 0.0
 
-    # Audit Log
-    raw_audit_logs = state.get("raw_audit_logs", {})
+    raw_audit_logs = state.get("raw_audit_logs") or {}
     raw_audit_logs["agent_3_tma"] = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source": "Hasil Ekstraksi Parsing Laporan Live KP2C (Agent 2)",
@@ -113,4 +93,3 @@ def agent_3_tma(state: FloodState) -> FloodState:
         "travel_time_hours": travel_time,
         "raw_audit_logs": raw_audit_logs
     }
-

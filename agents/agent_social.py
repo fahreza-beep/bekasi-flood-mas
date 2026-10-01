@@ -1,6 +1,10 @@
 import os
 import asyncio
+from dotenv import load_dotenv
 from telethon import TelegramClient
+from state import FloodState
+
+load_dotenv()
 
 def fetch_private_telegram_kp2c():
     api_id = os.getenv("TELEGRAM_API_ID")
@@ -17,7 +21,6 @@ def fetch_private_telegram_kp2c():
             await client.disconnect()
             return {"status": "failed", "message": "Belum login / OTP belum dimasukkan"}
 
-        # Otomatis cari chat/grup yang punya kata 'kp2c' di namanya
         target_dialog = None
         async for dialog in client.iter_dialogs():
             if "kp2c" in dialog.name.lower():
@@ -49,26 +52,24 @@ def fetch_private_telegram_kp2c():
     except Exception as e:
         return {"status": "failed", "message": str(e)}
 
-def agent_2_social(state):
+def agent_2_social(state: FloodState) -> FloodState:
     print("\n[Agent 2] Menarik Laporan Live KP2C via Telegram Private Channel...")
 
     telegram_result = fetch_private_telegram_kp2c()
 
-    # Ambil teks laporan jika berhasil
     report_text = None
     if telegram_result.get("status") == "success" and telegram_result.get("data"):
         report_text = telegram_result["data"].get("text")
 
-    # Simpan ke log audit
-    raw_audit_logs = state.get("raw_audit_logs", {})
+    raw_audit_logs = state.get("raw_audit_logs") or {}
     raw_audit_logs["agent_2_social"] = {
         "timestamp": telegram_result.get("data", {}).get("timestamp", "N/A") if isinstance(telegram_result.get("data"), dict) else "N/A",
         "source": "Private Telegram Channel KP2C",
         "raw_data": telegram_result
     }
 
-    # Hanya kembalikan key yang valid untuk FloodState
     return {
         "field_reports": report_text,
+        "raw_social_data": telegram_result,
         "raw_audit_logs": raw_audit_logs
     }
